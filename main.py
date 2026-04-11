@@ -1,5 +1,4 @@
 from flask import Flask, request, render_template, send_from_directory, jsonify
-from flask_cors import CORSMiddleware 
 from PIL import Image
 from pdf2image import convert_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
