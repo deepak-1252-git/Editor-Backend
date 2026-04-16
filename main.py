@@ -1,6 +1,6 @@
 from flask import Flask, request, send_from_directory, jsonify
 from PIL import Image
-from pdf2image import convert_from_path
+from pdf2image import convert_from_path,pdfinfo_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
 from pdf2docx import Converter # For PDF to Word
@@ -168,10 +168,14 @@ def convert_all_types():
             for f in files:
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
                 f.save(temp_path)
-                images = convert_from_path(temp_path, first_page=1, last_page=1)
-                if images:
-                    out_name = f"pdf_conv_{uuid.uuid4().hex}.jpg"
-                    images[0].save(os.path.join(OUTPUT_FOLDER, out_name), "JPEG")
+
+                info = pdfinfo_from_path(temp_path)
+                max_pages = info["Pages"]
+
+                images = convert_from_path(temp_path, first_page=1, last_page=max_pages)
+                for i, image in enumerate(images):
+                    out_name = f"conv_p{i+1}_{uuid.uuid4().hex}.jpg"
+                    image.save(os.path.join(OUTPUT_FOLDER, out_name), "JPEG")
                     output_files.append({"name": out_name, "type": "JPG"})
                 os.remove(temp_path)
 
