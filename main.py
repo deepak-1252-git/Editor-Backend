@@ -1,9 +1,14 @@
-from flask import Flask, request, render_template, send_from_directory, jsonify
+from flask import Flask, request, send_from_directory, jsonify
 from PIL import Image
 from pdf2image import convert_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
-import os, time, uuid
+from docx import Document
+from pdf2docx import Converter # For PDF to Word
 from werkzeug.utils import secure_filename
+import pdfkit
+import zipfile
+import os, time, uuid
+
 
 app = Flask(__name__)
 # ---Cors
@@ -108,7 +113,7 @@ def compress_image():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/convertor', methods=['POST'])
-def convert_image():
+def convert_all_types():
     delete_old_files(OUTPUT_FOLDER)
      
     files = request.files.getlist('image')
@@ -117,12 +122,12 @@ def convert_image():
 
     output_files = []
     format_map = {
-        'single_img_to_single_pdf': ('PDF', 'pdf'),
         'png-to-jpg': ('JPEG', 'jpg'),
         'jpg-to-png': ('PNG', 'png'),
         'to-webp': ('WEBP', 'webp'),
         'to-bmp': ('BMP', 'bmp'),
         'to-gif': ('GIF', 'gif'),
+        'single_img_to_single_pdf': ('PDF', 'pdf'),
     }
 
     try:
@@ -134,6 +139,30 @@ def convert_image():
             out_name = f"merged_{uuid.uuid4().hex}.pdf"
             image_list[0].save(os.path.join(OUTPUT_FOLDER, out_name), save_all=True, append_images=image_list[1:])
             output_files.append({"name": out_name, "type": "PDF"})
+
+        elif convert_type == "html-to-pdf":
+            for f in files:
+                temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                f.save(temp_path)
+                out_name = f"conv_{uuid.uuid4().hex}.pdf"
+                pdfkit.from_file(temp_path, os.path.join(OUTPUT_FOLDER, out_name))
+
+                output_files.append({"name": out_name, "type": "pdf"})
+                os.remove(temp_path)
+                
+        elif convert_type == "pdf-to-word":
+            for f in files:
+                temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                f.save(temp_path)
+                out_name = f"doc_{uuid.uuid4().hex}.docx"
+                out_path = os.path.join(OUTPUT_FOLDER, out_name)
+                
+                cv = Converter(temp_path)
+                cv.convert(out_path, start=0, end=None)
+                cv.close()
+                
+                output_files.append({"name": out_name, "type": "DOCX"})
+                os.remove(temp_path)
 
         elif convert_type == "pdf-to-img":
             for f in files:
@@ -157,7 +186,25 @@ def convert_image():
                     img.save(os.path.join(OUTPUT_FOLDER, out_name), pill_format)
                     output_files.append({"name": out_name, "type": extension.upper()})
 
-        return jsonify({"files": output_files})
+            else : 
+                return jsonify({"error": "Unsupported conversion type"}), 400
+
+# --------------------for zip file--------------------------
+        if len(output_files) > 1:
+             
+            zip_name = f"zip_export_{uuid.uuid4().hex}.zip"
+            zip_path = os.path.join(OUTPUT_FOLDER, zip_name)
+            
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                for file_info in output_files:
+                    file_path = os.path.join(OUTPUT_FOLDER, file_info['name'])
+                    
+                    zipf.write(file_path, arcname=file_info['name'])
+            
+            return jsonify({"files": [{"name": zip_name, "type": "ZIP"}]})
+        else:
+            return jsonify({"files": output_files})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
