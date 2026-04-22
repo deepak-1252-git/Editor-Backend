@@ -1,20 +1,14 @@
-FROM python:3.11-slim
+FROM python:3.11-bullseye
 
-# System dependencies install karo
-# wkhtmltopdf -> HTML to PDF ke liye
-# poppler-utils -> PDF to Image ke liye
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Pehle mirrors ko reset karne ki koshish karte hain aur fir install
+RUN apt-get update --fix-missing && apt-get install -y \
     wkhtmltopdf \
     poppler-utils \
-    libnss3 \
-    libasound2 \
-    libatk1.0-0 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
-# App directory set karo
+
 WORKDIR /app
 
-# Sabse pehle requirements copy aur install karo (Taaki build fast ho)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
