@@ -7,8 +7,12 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     wkhtmltopdf \
     poppler-utils \
+    libnss3 \
+    libxss1 \
+    libasound2 \
+    libatk-bridge2.0-0 \
+    libgtk-3-0 \
     && rm -rf /var/lib/apt/lists/*
-
 # App directory set karo
 WORKDIR /app
 
