@@ -3,9 +3,10 @@ from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
-from pdf2docx import Converter # For PDF to Word
+from pdf2docx import Converter  
 from werkzeug.utils import secure_filename
 from playwright.sync_api import sync_playwright 
+import qrcode
 import zipfile
 import os, time, uuid
 
@@ -35,7 +36,7 @@ def format_size(size_kb):
         return f"{round(size_kb / 1024, 2)} MB"
     return f"{round(size_kb / (1024 * 1024), 2)} GB"
 
-# --- ROUTES ---
+# ----------------- ROUTES ------------------
 
 @app.route('/')
 def health_check():
@@ -273,6 +274,33 @@ def crop_rotate():
             img.save(os.path.join(OUTPUT_FOLDER, name), "JPEG", quality=95)
             return jsonify({"filename": name})
         except Exception as e: return jsonify({"error": str(e)}), 500
+
+@app.route('/generate_qr', methods=['POST'])
+def generate_qr():
+    delete_old_files(OUTPUT_FOLDER)
+    
+    data = request.json 
+    qr_text = data.get('text')
+    fill = data.get('color', '#000000')
+    back = data.get('bg_color', '#ffffff')
+    
+    if not qr_text:
+        return jsonify({"error": "No text provided"}), 400
+        
+    try:
+        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr.add_data(qr_text)
+        qr.make(fit=True)
+        
+        img = qr.make_image(fill_color=fill, back_color=back)
+        
+        name = f"qr_{uuid.uuid4().hex}.png"
+        img.save(os.path.join(OUTPUT_FOLDER, name))
+        
+        return jsonify({"filename": name})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 # --- SECURE SERVING ---
 @app.route('/outputs/<filename>')
