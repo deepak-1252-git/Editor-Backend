@@ -5,7 +5,7 @@ from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
 from pdf2docx import Converter # For PDF to Word
 from werkzeug.utils import secure_filename
-import pdfkit
+from playwright.sync_api import sync_playwright 
 import zipfile
 import os, time, uuid
 
@@ -145,11 +145,20 @@ def convert_all_types():
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
                 f.save(temp_path)
                 out_name = f"conv_{uuid.uuid4().hex}.pdf"
-                pdfkit.from_file(temp_path, os.path.join(OUTPUT_FOLDER, out_name))
+                out_path = os.path.join(OUTPUT_FOLDER, out_name)
+
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page()
+                     
+                    with open(temp_path, 'r', encoding='utf-8') as html_file:
+                        page.set_content(html_file.read(), wait_until="networkidle")
+                    page.pdf(path=out_path, format="A4")
+                    browser.close()
 
                 output_files.append({"name": out_name, "type": "pdf"})
                 os.remove(temp_path)
-                
+
         elif convert_type == "pdf-to-word":
             for f in files:
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
