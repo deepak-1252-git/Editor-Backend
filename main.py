@@ -7,9 +7,10 @@ from pdf2docx import Converter
 from werkzeug.utils import secure_filename
 from playwright.sync_api import sync_playwright 
 import qrcode
+from qrcode.image.styledpil import StyledPilImage
+from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleDrawer
 import zipfile
 import os, time, uuid
-
 
 app = Flask(__name__)
 # ---Cors
@@ -283,16 +284,26 @@ def generate_qr():
     qr_text = data.get('text')
     fill = data.get('color', '#000000')
     back = data.get('bg_color', '#ffffff')
+    qr_type = data.get('qr_type', 'square')
     
     if not qr_text:
         return jsonify({"error": "No text provided"}), 400
         
     try:
-        qr = qrcode.QRCode(version=1, box_size=10, border=5)
+        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
         qr.add_data(qr_text)
         qr.make(fit=True)
         
-        img = qr.make_image(fill_color=fill, back_color=back)
+        if qr_type == 'rounded':
+            drawer = RoundedModuleDrawer()
+        else:
+            drawer = SquareModuleDrawer()
+
+        img = qr.make_image(
+            image_factory=StyledPilImage, 
+            module_drawer=drawer,
+            fill_color=fill, back_color=back
+        )
         
         name = f"qr_{uuid.uuid4().hex}.png"
         img.save(os.path.join(OUTPUT_FOLDER, name))
