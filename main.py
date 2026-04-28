@@ -38,12 +38,17 @@ def format_size(size_kb):
         return f"{round(size_kb / 1024, 2)} MB"
     return f"{round(size_kb / (1024 * 1024), 2)} GB"
 
-# ----------------- ROUTES ------------------
+def hex_to_rgb(hex_str):
+    hex_str = hex_str.lstrip('#')
+    return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+
+# ----------------- ROUTES ------------------------
 
 @app.route('/')
 def health_check():
     return jsonify({"status": "Backend is running lala!"})
 
+# -----------------------------------------------------
 @app.route('/resizer', methods=['POST'])
 def resize_image():
     delete_old_files(OUTPUT_FOLDER)
@@ -75,7 +80,7 @@ def resize_image():
             })
     except Exception as e:
         return jsonify({"error": str(e)}), 400
-
+# ----------------------------------------------------
 @app.route('/compressor', methods=['POST'])
 def compress_image():
     delete_old_files(OUTPUT_FOLDER)
@@ -114,7 +119,7 @@ def compress_image():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+# ----------------------------------------------------------------
 @app.route('/convertor', methods=['POST'])
 def convert_all_types():
     delete_old_files(OUTPUT_FOLDER)
@@ -223,7 +228,7 @@ def convert_all_types():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+# --------------------------------------------------------------------
 @app.route('/pdf_tool', methods=['POST'])
 def pdf_tool():
     delete_old_files(OUTPUT_FOLDER)
@@ -262,7 +267,7 @@ def pdf_tool():
         return jsonify({"filename": output_filename, "type": "PDF"})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
+# ---------------------------------------------------------------
 @app.route('/crop_rotate', methods=['POST'])
 def crop_rotate():
     delete_old_files(OUTPUT_FOLDER)
@@ -276,21 +281,24 @@ def crop_rotate():
             img.save(os.path.join(OUTPUT_FOLDER, name), "JPEG", quality=95)
             return jsonify({"filename": name})
         except Exception as e: return jsonify({"error": str(e)}), 500
-
+# ---------------------------------------------------------------------
 @app.route('/generate_qr', methods=['POST'])
 def generate_qr():
     delete_old_files(OUTPUT_FOLDER)
     
     data = request.json 
     qr_text = data.get('text')
-    fill = data.get('color', '#000000')
-    back = data.get('bg_color', '#ffffff')
+    fill_hex = data.get('color', '#000000')
+    back_hex = data.get('bg_color', '#ffffff')
     qr_type = data.get('qr_type', 'square')
     
     if not qr_text:
         return jsonify({"error": "No text provided"}), 400
         
     try:
+        fill_rgb = hex_to_rgb(fill_hex)
+        back_rgb = hex_to_rgb(back_hex)
+
         qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
         qr.add_data(qr_text)
         qr.make(fit=True)
@@ -300,17 +308,10 @@ def generate_qr():
         else:
             drawer = SquareModuleDrawer()
 
-        def hex_to_rgb(hex_str):
-                hex_str = hex_str.lstrip('#')
-                return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
-
-        fill_rgb = hex_to_rgb(fill)
-        back_rgb = hex_to_rgb(back)
-
         img = qr.make_image(
             image_factory=StyledPilImage, 
             module_drawer=drawer,
-            color_mask=SolidFillColorMask(fill_color=fill_rgb, back_color=back_rgb)
+            color_mask=SolidFillColorMask(back_color=back_rgb , fill_color=fill_rgb)
         )
         
         name = f"qr_{uuid.uuid4().hex}.png"
