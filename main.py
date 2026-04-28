@@ -311,7 +311,7 @@ def generate_qr():
         img = qr.make_image(
             image_factory=StyledPilImage, 
             module_drawer=drawer,
-            color_mask=SolidFillColorMask(back_color=back_rgb , fill_color=fill_rgb)
+            color_mask=SolidFillColorMask(back_color=back_rgb , front_color=fill_rgb)
         )
         
         name = f"qr_{uuid.uuid4().hex}.png"
@@ -322,7 +322,7 @@ def generate_qr():
         return jsonify({"error": str(e)}), 500
 
 
-# --- SECURE SERVING ---
+# ------------- SECURE SERVING --------------------
 @app.route('/outputs/<filename>')
 def get_output_file(filename):
     # secure_filename prevents path traversal attacks
