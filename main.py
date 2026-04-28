@@ -1,3 +1,4 @@
+# ------------Library's----and----module's----------------------
 from flask import Flask, request, send_from_directory, jsonify
 from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
@@ -6,13 +7,14 @@ from docx import Document
 from pdf2docx import Converter  
 from werkzeug.utils import secure_filename
 from playwright.sync_api import sync_playwright 
-import qrcode
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleDrawer
-from qrcode.image.styles.colormasks import SolidFillColorMask
+from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
+import qrcode
 import zipfile
 import os, time, uuid
 
+# ----------------------------------------------------
 app = Flask(__name__)
 # ---Cors
 from flask_cors import CORS
@@ -286,37 +288,53 @@ def crop_rotate():
 def generate_qr():
     delete_old_files(OUTPUT_FOLDER)
     
-    data = request.json 
-    qr_text = data.get('text')
-    fill_hex = data.get('color', '#000000')
-    back_hex = data.get('bg_color', '#ffffff')
-    qr_type = data.get('qr_type', 'square')
-    
-    if not qr_text:
-        return jsonify({"error": "No text provided"}), 400
-        
+    text = request.form.get('text')
+    fill_hex = request.form.get('color', '#6366f1')  
+    back_hex = request.form.get('bg_color', '#ffffff')
+    gradient_hex = request.form.get('gradient_color')  
+    qr_type = request.form.get('qr_type', 'square')
+    logo_file = request.files.get('logo')
+
+    if not text:
+        return jsonify({"error": "Text is required"}), 400
+
     try:
         fill_rgb = hex_to_rgb(fill_hex)
         back_rgb = hex_to_rgb(back_hex)
+        gradient_rgb = hex_to_rgb(gradient_hex)
 
-        qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
-        qr.add_data(qr_text)
+        qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
+        qr.add_data(text)
         qr.make(fit=True)
-        
+ 
         if qr_type == 'rounded':
             drawer = RoundedModuleDrawer()
         else:
             drawer = SquareModuleDrawer()
+        
+        if gradient_hex and gradient_hex != fill_hex:
+            mask = RadialGradiantColorMask(back_color=back_rgb, edge_color=fill_rgb, center_color=gradient_rgb)
+        else:
+            mask = SolidFillColorMask()
+
+        logo_path = None
+        if logo_file:
+            logo_path = os.path.join(OUTPUT_FOLDER, f"temp_logo_{uuid.uuid4().hex}.png")
+            logo_file.save(logo_path)
 
         img = qr.make_image(
-            image_factory=StyledPilImage, 
+            image_factory=StyledPilImage,
             module_drawer=drawer,
-            color_mask=SolidFillColorMask(back_color=back_rgb , front_color=fill_rgb)
+            color_mask=mask,
+            embeded_image_path=logo_path
         )
-        
+
         name = f"qr_{uuid.uuid4().hex}.png"
         img.save(os.path.join(OUTPUT_FOLDER, name))
-        
+
+        if logo_path and os.path.exists(logo_path):
+            os.remove(logo_path)
+
         return jsonify({"filename": name})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
