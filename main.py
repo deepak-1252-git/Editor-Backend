@@ -9,6 +9,7 @@ from playwright.sync_api import sync_playwright
 import qrcode
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleDrawer
+from qrcode.image.styles.colormasks import SolidFillColorMask
 import zipfile
 import os, time, uuid
 
@@ -299,10 +300,17 @@ def generate_qr():
         else:
             drawer = SquareModuleDrawer()
 
+        def hex_to_rgb(hex_str):
+                hex_str = hex_str.lstrip('#')
+                return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+
+        fill_rgb = hex_to_rgb(fill)
+        back_rgb = hex_to_rgb(back)
+
         img = qr.make_image(
             image_factory=StyledPilImage, 
             module_drawer=drawer,
-            fill_color=fill, back_color=back
+            color_mask=SolidFillColorMask(fill_color=fill_rgb, back_color=back_rgb)
         )
         
         name = f"qr_{uuid.uuid4().hex}.png"
