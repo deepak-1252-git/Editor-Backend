@@ -157,7 +157,7 @@ def convert_all_types():
             for f in files:
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
                 f.save(temp_path)
-                out_name = f"conv_{uuid.uuid4().hex}.pdf"
+                out_name = f"pdf_{uuid.uuid4().hex}.pdf"
                 out_path = os.path.join(OUTPUT_FOLDER, out_name)
 
                 with sync_playwright() as p:
@@ -172,7 +172,7 @@ def convert_all_types():
                 output_files.append({"name": out_name, "type": "pdf"})
                 os.remove(temp_path)
 
-        elif convert_type == "pdf-to-word":
+        elif convert_type == "pdf-to-docx":
             for f in files:
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
                 f.save(temp_path)
@@ -186,6 +186,20 @@ def convert_all_types():
                 output_files.append({"name": out_name, "type": "DOCX"})
                 os.remove(temp_path)
 
+        elif convert_type == "docx-to-pdf":
+            for f in files:
+                temp_docx = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                f.save(temp_docx)
+
+                out_name = f"pdf_{uuid.uuid4().hex}.pdf"
+                out_path = os.path.join(OUTPUT_FOLDER, out_name)
+
+                doc = aw.Document(temp_docx)
+                doc.save(out_path)
+
+                output_files.append({"name": out_name, "type": "PDF"})
+                os.remove(temp_docx)
+                
         elif convert_type == "pdf-to-img":
             for f in files:
                 temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
