@@ -5,6 +5,9 @@ from pdf2image import convert_from_path,pdfinfo_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
 from pdf2docx import Converter  
+from svglib.svglib import svg2rlg
+from reportlab.graphics import renderPM
+import aspose.words as aw
 from werkzeug.utils import secure_filename
 from playwright.sync_api import sync_playwright 
 from qrcode.image.styledpil import StyledPilImage
@@ -12,7 +15,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleD
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
 import qrcode
 import zipfile
-import os, time, uuid
+import os, time, uuid ,io
 
 # ----------------------------------------------------
 app = Flask(__name__)
@@ -196,6 +199,22 @@ def convert_all_types():
                     out_name = f"conv_p{i+1}_{uuid.uuid4().hex}.jpg"
                     image.save(os.path.join(OUTPUT_FOLDER, out_name), "JPEG")
                     output_files.append({"name": out_name, "type": "JPG"})
+                os.remove(temp_path)
+
+        elif convert_type == "to-svg":
+            for f in files:
+                temp_path = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                f.save(temp_path)
+
+                out_name = f"svg_{uuid.uuid4().hex}.svg"
+                out_path = os.path.join(OUTPUT_FOLDER, out_name)
+
+                doc = aw.Document()
+                builder = aw.DocumentBuilder(doc)
+                builder.insert_image(temp_path)
+                doc.save(out_path)
+                
+                output_files.append({"name": out_name, "type": "SVG"})
                 os.remove(temp_path)
 
         else:
