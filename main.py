@@ -228,10 +228,18 @@ def convert_all_types():
                         drawing = svg2rlg(temp_svg)
                         out_name = f"conv_{uuid.uuid4().hex}.{extension}"
                         out_path = os.path.join(OUTPUT_FOLDER, out_name)
-                        
-                        rl_format = "JPG" if pill_format == "JPEG" else pill_format
-                        renderPM.drawToFile(drawing, out_path, fmt=rl_format)
-                        
+
+                        if extension.lower() == 'webp':
+                            png_data = io.BytesIO()
+                            renderPM.drawToFile(drawing, png_data, fmt="PNG")
+                            png_data.seek(0)
+                            
+                            img = Image.open(png_data)
+                            img.save(out_path, "WEBP")
+                        else :
+                            rl_format = "JPG" if pill_format == "JPEG" else pill_format
+                            renderPM.drawToFile(drawing, out_path, fmt=rl_format)
+                            
                         output_files.append({"name": out_name, "type": extension.upper()})
                         os.remove(temp_svg)
                     else:
