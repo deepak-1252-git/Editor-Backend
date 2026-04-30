@@ -15,7 +15,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleD
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
 import qrcode
 import zipfile
-import os, time, uuid ,io
+import os, time, uuid
 
 # ----------------------------------------------------
 app = Flask(__name__)
@@ -135,8 +135,8 @@ def convert_all_types():
 
     output_files = []
     format_map = {
-        'png-to-jpg': ('JPEG', 'jpg'),
-        'jpg-to-png': ('PNG', 'png'),
+        'to-jpg': ('JPEG', 'jpg'),
+        'to-png': ('PNG', 'png'),
         'to-webp': ('WEBP', 'webp'),
         'to-bmp': ('BMP', 'bmp'),
         'to-gif': ('GIF', 'gif'),
@@ -221,13 +221,27 @@ def convert_all_types():
             pill_format, extension = format_map.get(convert_type, (None, None))
             if pill_format:
                 for f in files:
-                    img = Image.open(f)
-                    if pill_format in ["JPEG", "PDF"] and img.mode in ("RGBA", "P"):
-                        img = img.convert("RGB")
-                    out_name = f"conv_{uuid.uuid4().hex}.{extension}"
-                    img.save(os.path.join(OUTPUT_FOLDER, out_name), pill_format)
-                    output_files.append({"name": out_name, "type": extension.upper()})
+                    if f.filename.lower().endswith('.svg'):
+                        temp_svg = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                        f.save(temp_svg)
+                        
+                        drawing = svg2rlg(temp_svg)
+                        out_name = f"conv_{uuid.uuid4().hex}.{extension}"
+                        out_path = os.path.join(OUTPUT_FOLDER, out_name)
+                        
+                        rl_format = "JPG" if pill_format == "JPEG" else pill_format
+                        renderPM.drawToFile(drawing, out_path, fmt=rl_format)
+                        
+                        output_files.append({"name": out_name, "type": extension.upper()})
+                        os.remove(temp_svg)
+                    else:
+                        img = Image.open(f)
+                        if pill_format in ["JPEG", "PDF"] and img.mode in ("RGBA", "P"):
+                            img = img.convert("RGB")
 
+                        out_name = f"conv_{uuid.uuid4().hex}.{extension}"
+                        img.save(os.path.join(OUTPUT_FOLDER, out_name), pill_format)
+                        output_files.append({"name": out_name, "type": extension.upper()})
             else : 
                 return jsonify({"error": "Unsupported conversion type"}), 400
 
