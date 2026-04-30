@@ -15,7 +15,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleD
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
 import qrcode
 import zipfile
-import os, time, uuid
+import os, time, uuid ,oi
 
 # ----------------------------------------------------
 app = Flask(__name__)
