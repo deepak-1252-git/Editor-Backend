@@ -1,4 +1,5 @@
 # ------------Library's----and----module's----------------------
+from flask_cors import CORS
 from flask import Flask, request, send_from_directory, jsonify
 from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
@@ -6,7 +7,7 @@ from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
 from pdf2docx import Converter  
 from svglib.svglib import svg2rlg
-from reportlab.graphics import renderPM
+from reportlab.graphics import renderPM,renderPDF
 import aspose.words as aw
 from werkzeug.utils import secure_filename
 from playwright.sync_api import sync_playwright 
@@ -19,10 +20,16 @@ import os, time, uuid ,io
 
 # ----------------------------------------------------
 app = Flask(__name__)
-# ---Cors
-from flask_cors import CORS
-CORS(app, resources={r"/*": {"origins": "*"}}) 
-
+CORS(app, resources={
+    r"/*": {
+        "origins": [
+            "https://toolnovax.vercel.app", 
+            "http://localhost:3000", 
+            "http://127.0.0.1:3000"
+        ]
+    }
+})
+ 
 # Security: Limit file size to 16MB
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
 UPLOAD_FOLDER = "/tmp"
@@ -31,7 +38,7 @@ OUTPUT_FOLDER = "/tmp"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'bmp'}
+ALLOWED_EXTENSIONS = {'png','jpg','jpeg','gif','webp','pdf','bmp','jifi','svg','docx','doc','html'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -100,7 +107,7 @@ def compress_image():
         target_size = int(target_size)
         img = Image.open(file)
         original_size_kb = len(file.read()) / 1024
-        file.seek(0) # Reset file pointer after reading size
+        file.seek(0) 
 
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
@@ -147,10 +154,28 @@ def convert_all_types():
         if convert_type == "multi_img_to_single_pdf":
             image_list = []
             for f in files:
-                img = Image.open(f).convert("RGB")
-                image_list.append(img)
+                try:
+                    if f.filename.lower().endswith('.svg'):
+                        temp_svg = os.path.join(UPLOAD_FOLDER, secure_filename(f.filename))
+                        f.save(temp_svg)
+
+                        drawing = svg2rlg(temp_svg)
+                        png_io = io.BytesIO()
+                        renderPM.drawToFile(drawing, png_io, fmt="PNG")
+                        png_io.seek(0)
+
+                        img = Image.open(png_io).convert("RGB")
+                        image_list.append(img)
+                        os.remove(temp_svg)
+                    else:
+                        img = Image.open(f).convert("RGB")
+                        image_list.append(img)
+                except Exception as e:
+                    continue 
+
             out_name = f"merged_{uuid.uuid4().hex}.pdf"
-            image_list[0].save(os.path.join(OUTPUT_FOLDER, out_name), save_all=True, append_images=image_list[1:])
+            out_path = os.path.join(OUTPUT_FOLDER, out_name)
+            image_list[0].save(out_path, save_all=True, append_images=image_list[1:])
             output_files.append({"name": out_name, "type": "PDF"})
 
         elif convert_type == "html-to-pdf":
@@ -240,10 +265,13 @@ def convert_all_types():
                         f.save(temp_svg)
                         
                         drawing = svg2rlg(temp_svg)
-                        out_name = f"conv_{uuid.uuid4().hex}.{extension}"
+                        out_name = f"convto{extension}_{uuid.uuid4().hex}.{extension}"
                         out_path = os.path.join(OUTPUT_FOLDER, out_name)
 
-                        if extension.lower() == 'webp':
+                        if extension.lower() == 'pdf':
+                            renderPDF.drawToFile(drawing, out_path)
+
+                        elif extension.lower() == 'webp':
                             png_data = io.BytesIO()
                             renderPM.drawToFile(drawing, png_data, fmt="PNG")
                             png_data.seek(0)
@@ -256,12 +284,12 @@ def convert_all_types():
                             
                         output_files.append({"name": out_name, "type": extension.upper()})
                         os.remove(temp_svg)
-                    else:
+                    else: 
                         img = Image.open(f)
                         if pill_format in ["JPEG", "PDF"] and img.mode in ("RGBA", "P"):
                             img = img.convert("RGB")
 
-                        out_name = f"conv_{uuid.uuid4().hex}.{extension}"
+                        out_name = f"convto{extension}_{uuid.uuid4().hex}.{extension}"
                         img.save(os.path.join(OUTPUT_FOLDER, out_name), pill_format)
                         output_files.append({"name": out_name, "type": extension.upper()})
             else : 
