@@ -431,7 +431,7 @@ def save_word():
 
         buf = html2docx(html_content)
         
-        return send_file(
+        return send_from_directory(
             io.BytesIO(buf),
             mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             as_attachment=True,
