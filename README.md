@@ -19,8 +19,8 @@
 ## 🛠️ Tech Stack
 
 - **Language:** Python  
-- **Framework:** Flask / FastAPI *(update if needed)*  
-- **Libraries:** Pillow / OpenCV *(if used)*  
+- **Framework:** Flask  
+- **Libraries:** Pillow   
 - **Containerization:** Docker  
 
 ---
@@ -55,12 +55,15 @@ http://localhost:5000
 docker build -t toolnova-backend .
 docker run -p 5000:5000 toolnova-backend
 📡 API Endpoints (Example)
-Method	Endpoint	Description
-POST	/resize	Resize image
-POST	/compress	Compress image
-POST	/convert	Convert file format
-POST	/pdf	PDF operations
-POST	/crop-rotate	Crop & rotate image
+Method	Endpoint	     Description
+POST	/resize	         Resize image
+POST	/compress	     Compress image
+POST	/convert	     Convert file format
+POST	/pdf	         PDF operations
+POST	/crop-rotate	 Edit any for socal media image
+POST	/qrcode    	     Generate QR code
+POST	/wordtool        Edit any word file or create form Text
+
 
 ⚠️ Update endpoints based on your actual main.py
 

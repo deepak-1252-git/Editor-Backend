@@ -424,7 +424,7 @@ def generate_qr():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ------------- Word ------------------------------------
+# ------------- Word --------------------------
 @app.route('/save-word', methods=['POST'])
 def save_word():
     try:
@@ -450,18 +450,13 @@ def load_word():
             return jsonify({"error": "No file"}), 400
         
         file = request.files['file']
-        
+    
         result = mammoth.convert_to_html(file)
         html_content = result.value # Ye editor mein jayega
         
         return jsonify({"status": "success", "html": html_content})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# --- Common Download Route ---
-@app.route('/download/<filename>')
-def download_file(filename):
-    return send_from_directory(OUTPUT_FOLDER, filename, as_attachment=True)
 
 # ------------- SECURE SERVING --------------------
 @app.route('/outputs/<filename>')
