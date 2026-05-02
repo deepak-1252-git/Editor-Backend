@@ -13,12 +13,13 @@ from playwright.sync_api import sync_playwright
 from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleDrawer
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
+from html2docx import html2docx
 import aspose.words as aw
 import qrcode
 import zipfile
+import mammoth
 import os, time, uuid ,io
 
-from html2docx import html2docx
 # ----------------------------------------------------
 app = Flask(__name__)
 CORS(app, resources={
@@ -423,22 +424,44 @@ def generate_qr():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ------------- Word ------------------------------------
 @app.route('/save-word', methods=['POST'])
 def save_word():
     try:
-        data = request.get_json()
+        data = request.get_json(force=True)
         html_content = data.get('html_content', '')
-
+         
         buf = html2docx(html_content)
         
-        return send_from_directory(
-            io.BytesIO(buf),
-            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            as_attachment=True,
-            filename="ToolNovax_Doc.docx"
-        )
+        out_name = f"doc_{uuid.uuid4().hex}.docx"
+        out_path = os.path.join(OUTPUT_FOLDER, out_name)
+        
+        with open(out_path, 'wb') as f:
+            f.write(buf)
+            
+        return jsonify({"status": "success", "filename": out_name})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route('/load-word', methods=['POST'])
+def load_word():
+    try:
+        if 'file' not in request.files:
+            return jsonify({"error": "No file"}), 400
+        
+        file = request.files['file']
+        
+        result = mammoth.convert_to_html(file)
+        html_content = result.value # Ye editor mein jayega
+        
+        return jsonify({"status": "success", "html": html_content})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- Common Download Route ---
+@app.route('/download/<filename>')
+def download_file(filename):
+    return send_from_directory(OUTPUT_FOLDER, filename, as_attachment=True)
 
 # ------------- SECURE SERVING --------------------
 @app.route('/outputs/<filename>')
