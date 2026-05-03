@@ -440,7 +440,24 @@ def save_word():
         data = request.get_json(force=True)
         html_content = data.get('html_content', '')
          
-        buf = html2docx(html_content, title="ToolNovax_Document")
+        styled_html = f"""
+            <html>
+            <head>
+                <style>
+                    p, div, a {{
+                        word-wrap: break-word;
+                        overflow-wrap: break-word;
+                        word-break: break-all;
+                    }}
+                </style>
+            </head>
+            <body>
+                {html_content}
+            </body>
+            </html>
+            """
+
+        buf = html2docx(styled_html, title="ToolNovax_Document")
         raw_bytes = buf.getvalue() 
 
         out_name = f"doc_{uuid.uuid4().hex}.docx"
