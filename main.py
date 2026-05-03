@@ -5,6 +5,7 @@ from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
 from docx import Document
+from fpdf import FPDF
 from pdf2docx import Converter  
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM,renderPDF
@@ -221,8 +222,16 @@ def convert_all_types():
                 out_name = f"pdf_{uuid.uuid4().hex}.pdf"
                 out_path = os.path.join(OUTPUT_FOLDER, out_name)
 
-                doc = aw.Document(temp_docx)
-                doc.save(out_path)
+                doc = Document(temp_docx)
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+    
+                for para in doc.paragraphs:
+                    safe_text = para.text.encode('latin-1', 'ignore').decode('latin-1')
+                    pdf.multi_cell(0, 10, txt=safe_text)
+                
+                pdf.output(out_path)                 
 
                 output_files.append({"name": out_name, "type": "PDF"})
                 os.remove(temp_docx)
@@ -431,16 +440,18 @@ def save_word():
         data = request.get_json(force=True)
         html_content = data.get('html_content', '')
          
-        buf = html2docx(html_content)
-        
+        buf = html2docx(html_content, title="ToolNovax_Document")
+        raw_bytes = buf.getvalue() 
+
         out_name = f"doc_{uuid.uuid4().hex}.docx"
         out_path = os.path.join(OUTPUT_FOLDER, out_name)
         
         with open(out_path, 'wb') as f:
-            f.write(buf)
-            
+            f.write(raw_bytes)
+   
         return jsonify({"status": "success", "filename": out_name})
     except Exception as e:
+        print(f"DEBUG ERROR: {str(e)}") 
         return jsonify({"error": str(e)}), 500
 
 @app.route('/load-word', methods=['POST'])
@@ -452,7 +463,7 @@ def load_word():
         file = request.files['file']
     
         result = mammoth.convert_to_html(file)
-        html_content = result.value # Ye editor mein jayega
+        html_content = result.value  
         
         return jsonify({"status": "success", "html": html_content})
     except Exception as e:
