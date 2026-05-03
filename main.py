@@ -1,6 +1,6 @@
 # ------------Library's----and----module's----------------------
-from flask_cors import CORS
 from flask import Flask, request, send_from_directory, jsonify
+from flask_cors import CORS
 from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
 from PyPDF2 import PdfMerger, PdfReader, PdfWriter
@@ -15,11 +15,8 @@ from qrcode.image.styledpil import StyledPilImage
 from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleDrawer
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
 from html2docx import html2docx
-import aspose.words as aw
-import qrcode
-import zipfile
-import mammoth
-import os, time, uuid ,io
+import aspose.words as aw , qrcode ,zipfile ,mammoth
+import os, time, uuid ,io ,threading
 
 # ----------------------------------------------------
 app = Flask(__name__)
@@ -33,14 +30,14 @@ CORS(app, resources={
     }
 })
  
-# Security: Limit file size to 16MB
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  
 UPLOAD_FOLDER = "/tmp"
 OUTPUT_FOLDER = "/tmp"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
 
+# Security: Limit file size to 16MB
+MAX_CONTENT_LENGTH = 16 * 1024 * 1024  
 ALLOWED_EXTENSIONS = {'png','jpg','jpeg','gif','webp','pdf','bmp','jifi','svg','docx','doc','html'}
 
 def allowed_file(filename):
@@ -433,39 +430,83 @@ def generate_qr():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ------------- Word --------------------------
+# ------------------------ Word --------------------------
 @app.route('/save-word', methods=['POST'])
 def save_word():
     try:
         data = request.get_json(force=True)
-        html_content = data.get('html_content', '')
-         
-        buf = html2docx(html_content, title="ToolNovax_Document")
-        raw_bytes = buf.getvalue() 
+        if not data:
+            return jsonify({"error": "No JSON data received"}), 400
 
-        out_name = f"doc_{uuid.uuid4().hex}.docx"
+        html_content = data.get('html_content', '').strip()
+        if not html_content:
+            return jsonify({"error": "Empty document content"}), 400
+ 
+        if len(html_content.encode('utf-8')) > MAX_CONTENT_LENGTH :
+            return jsonify({"error": f"Content too large (max {MAX_CONTENT_LENGTH}MB)"}), 413
+
+        custom_title = data.get('title', 'ToolNovax_Document').strip() or 'ToolNovax_Document'
+
+        buf = html2docx(html_content, title=custom_title)
+        raw_bytes = buf.getvalue()
+
+        out_name = f"doc_{uuid.uuid4().hex[:12]}.docx"
         out_path = os.path.join(OUTPUT_FOLDER, out_name)
-        
+
         with open(out_path, 'wb') as f:
             f.write(raw_bytes)
-   
-        return jsonify({"status": "success", "filename": out_name})
+
+        file_size_kb = round(len(raw_bytes) / 1024, 1)
+        return jsonify({
+            "status": "success",
+            "filename": out_name,
+            "size_kb": file_size_kb
+        })
+
     except Exception as e:
-        print(f"DEBUG ERROR: {str(e)}") 
+        print(f"[save-word ERROR] {e}")
         return jsonify({"error": str(e)}), 500
 
+# ----------Load Word----------------------------- 
 @app.route('/load-word', methods=['POST'])
 def load_word():
     try:
         if 'file' not in request.files:
-            return jsonify({"error": "No file"}), 400
-        
+            return jsonify({"error": "No file uploaded"}), 400
+
         file = request.files['file']
-    
-        result = mammoth.convert_to_html(file)
-        html_content = result.value  
-        
-        return jsonify({"status": "success", "html": html_content})
+
+        if file.filename == '':
+            return jsonify({"error": "No file selected"}), 400
+
+        if not allowed_file(file.filename):
+            return jsonify({"error": "Only .docx files are supported"}), 415
+
+        # Check file size
+        file.seek(0, 2)
+        file_size = file.tell()
+        file.seek(0)
+        if file_size > MAX_CONTENT_LENGTH:
+            return jsonify({"error": f"File too large (max {MAX_CONTENT_LENGTH}MB)"}), 413
+
+        style_map = """
+            p[style-name='Heading 1'] => h1:fresh
+            p[style-name='Heading 2'] => h2:fresh
+            p[style-name='Heading 3'] => h3:fresh
+            p[style-name='Heading 4'] => h4:fresh
+            b => strong
+            i => em
+        """
+        result = mammoth.convert_to_html(file, style_map=style_map)
+        html_content = result.value
+        warnings = [str(w) for w in result.messages]
+
+        return jsonify({
+            "status": "success",
+            "html": html_content,
+            "warnings": warnings[:5]   
+        })
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -476,9 +517,13 @@ def get_output_file(filename):
 
 @app.route('/download/<filename>')
 def download_file(filename):
-    return send_from_directory(OUTPUT_FOLDER, secure_filename(filename), as_attachment=True)
+    safe = secure_filename(filename)
+    file_path = os.path.join(OUTPUT_FOLDER, safe)
+    if not os.path.exists(file_path):
+        return jsonify({"error": "File not found or expired"}), 404
+    return send_from_directory(OUTPUT_FOLDER, safe, as_attachment=True)
 
-def delete_old_files(folder_path, minutes=5):
+def delete_old_files(folder_path, minutes=10):
     """Clean up old files to save disk space."""
     now = time.time()
     cutoff = now - (minutes * 60)
@@ -489,6 +534,19 @@ def delete_old_files(folder_path, minutes=5):
                 os.remove(file_path)
     except Exception as e:
         print(f"Cleanup error: {e}")
+
+# -----------------------
+def schedule_cleanup():
+    while True:
+        time.sleep(300)  # Run every 5 minutes
+        delete_old_files(OUTPUT_FOLDER, minutes=10)
+
+cleanup_thread = threading.Thread(target=schedule_cleanup, daemon=True)
+cleanup_thread.start()
+
+@app.route('/health')
+def health():
+    return jsonify({"status": "ok", "time": time.time()})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
