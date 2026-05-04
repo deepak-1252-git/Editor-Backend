@@ -1,5 +1,5 @@
 # ------------Library's----and----module's----------------------
-from flask import Flask, request, send_from_directory, jsonify
+from flask import Flask, request, send_from_directory, jsonify,Response
 from flask_cors import CORS
 from PIL import Image
 from pdf2image import convert_from_path,pdfinfo_from_path
@@ -16,7 +16,7 @@ from qrcode.image.styles.moduledrawers import RoundedModuleDrawer, SquareModuleD
 from qrcode.image.styles.colormasks import RadialGradiantColorMask, SolidFillColorMask
 from html2docx import html2docx
 import aspose.words as aw , qrcode ,zipfile ,mammoth
-import os, time, uuid ,io ,threading
+import os, time, uuid ,io ,threading,re
 
 # ----------------------------------------------------
 app = Flask(__name__)
@@ -35,24 +35,28 @@ OUTPUT_FOLDER = "/tmp"
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
-# Security: Limit file size to 16MB
-MAX_CONTENT_LENGTH = 16 * 1024 * 1024  
+ 
+MAX_CONTENT_LENGTH = 16
 ALLOWED_EXTENSIONS = {'png','jpg','jpeg','gif','webp','pdf','bmp','jifi','svg','docx','doc','html'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
+# ----for compresor--------------
 def format_size(size_kb):
     if size_kb < 1024:
         return f"{round(size_kb, 2)} KB"
     elif size_kb < 1024 * 1024:
         return f"{round(size_kb / 1024, 2)} MB"
     return f"{round(size_kb / (1024 * 1024), 2)} GB"
-
+# -----for qr generator-----------
 def hex_to_rgb(hex_str):
     hex_str = hex_str.lstrip('#')
     return tuple(int(hex_str[i:i+2], 16) for i in (0, 2, 4))
+
+def sanitize_filename(name: str) -> str:
+    """Remove illegal chars and limit length."""
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1F]', '', name).strip() or 'document'
+    return name[:80]  
 
 # ----------------- ROUTES ------------------------
 
@@ -434,37 +438,36 @@ def generate_qr():
 @app.route('/save-word', methods=['POST'])
 def save_word():
     try:
-        data = request.get_json(force=True)
-        if not data:
-            return jsonify({"error": "No JSON data received"}), 400
-
+        data = request.get_json(force=True) or {}
         html_content = data.get('html_content', '').strip()
         if not html_content:
-            return jsonify({"error": "Empty document content"}), 400
- 
-        if len(html_content.encode('utf-8')) > MAX_CONTENT_LENGTH :
+            return jsonify({"error": "Empty content"}), 400
+
+        raw_title = data.get('title', 'document')
+        clean_title = sanitize_filename(raw_title)
+
+        if len(html_content.encode('utf-8')) >MAX_CONTENT_LENGTH * 1024 * 1024 :
             return jsonify({"error": f"Content too large (max {MAX_CONTENT_LENGTH}MB)"}), 413
 
-        custom_title = data.get('title', 'ToolNovax_Document').strip() or 'ToolNovax_Document'
-
-        buf = html2docx(html_content, title=custom_title)
+        buf       = html2docx(html_content, title=clean_title)
         raw_bytes = buf.getvalue()
+ 
+        uid       = uuid.uuid4().hex[:12]
+        file_name = f"doc_{uid}.docx"
+        file_path = os.path.join(OUTPUT_FOLDER, file_name)
 
-        out_name = f"doc_{uuid.uuid4().hex[:12]}.docx"
-        out_path = os.path.join(OUTPUT_FOLDER, out_name)
-
-        with open(out_path, 'wb') as f:
+        with open(file_path, 'wb') as f:
             f.write(raw_bytes)
 
-        file_size_kb = round(len(raw_bytes) / 1024, 1)
         return jsonify({
-            "status": "success",
-            "filename": out_name,
-            "size_kb": file_size_kb
+            "status":    "success",
+            "filename":  file_name,
+            "title":     clean_title,       
+            "size_kb":   round(len(raw_bytes) / 1024, 1)
         })
 
     except Exception as e:
-        print(f"[save-word ERROR] {e}")
+        print(f"[save-word] {e}")
         return jsonify({"error": str(e)}), 500
 
 # ----------Load Word----------------------------- 
@@ -472,42 +475,35 @@ def save_word():
 def load_word():
     try:
         if 'file' not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+            return jsonify({"error": "No file provided"}), 400
 
         file = request.files['file']
-
-        if file.filename == '':
-            return jsonify({"error": "No file selected"}), 400
-
-        if not allowed_file(file.filename):
+        if not file.filename.lower().endswith('.docx'):
             return jsonify({"error": "Only .docx files are supported"}), 415
 
-        # Check file size
         file.seek(0, 2)
-        file_size = file.tell()
-        file.seek(0)
-        if file_size > MAX_CONTENT_LENGTH:
+        size = file.tell(); file.seek(0)
+        if size > MAX_CONTENT_LENGTH * 1024 * 1024:
             return jsonify({"error": f"File too large (max {MAX_CONTENT_LENGTH}MB)"}), 413
 
-        style_map = """
-            p[style-name='Heading 1'] => h1:fresh
-            p[style-name='Heading 2'] => h2:fresh
-            p[style-name='Heading 3'] => h3:fresh
-            p[style-name='Heading 4'] => h4:fresh
-            b => strong
-            i => em
-        """
+        style_map = (
+            "p[style-name='Heading 1'] => h1:fresh\n"
+            "p[style-name='Heading 2'] => h2:fresh\n"
+            "p[style-name='Heading 3'] => h3:fresh\n"
+            "p[style-name='Heading 4'] => h4:fresh\n"
+            "b => strong\n"
+            "i => em\n"
+        )
         result = mammoth.convert_to_html(file, style_map=style_map)
-        html_content = result.value
-        warnings = [str(w) for w in result.messages]
 
         return jsonify({
-            "status": "success",
-            "html": html_content,
-            "warnings": warnings[:5]   
+            "status":   "success",
+            "html":     result.value,
+            "warnings": [str(w) for w in result.messages][:5]
         })
 
     except Exception as e:
+        print(f"[load-word] {e}")
         return jsonify({"error": str(e)}), 500
 
 # ------------- SECURE SERVING --------------------
@@ -522,7 +518,7 @@ def download_file(filename):
     if not os.path.exists(file_path):
         return jsonify({"error": "File not found or expired"}), 404
     return send_from_directory(OUTPUT_FOLDER, safe, as_attachment=True)
-
+# ------------------------------------------------
 def delete_old_files(folder_path, minutes=10):
     """Clean up old files to save disk space."""
     now = time.time()
@@ -535,7 +531,7 @@ def delete_old_files(folder_path, minutes=10):
     except Exception as e:
         print(f"Cleanup error: {e}")
 
-# -----------------------
+# ---------------------------------------------------
 def schedule_cleanup():
     while True:
         time.sleep(300)  # Run every 5 minutes
@@ -547,7 +543,7 @@ cleanup_thread.start()
 @app.route('/health')
 def health():
     return jsonify({"status": "ok", "time": time.time()})
-
+# -------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
